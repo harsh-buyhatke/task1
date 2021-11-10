@@ -1,21 +1,75 @@
 const express = require("express");
 const db = require("./database");
 const router = express.Router();
+const bcrypt = require("bcrypt");
+const { body, validationResult } = require("express-validator")
+var passwordValidator = require('password-validator');
+
+
+var schema = new passwordValidator();
+schema
+.is().min(8)                                                                     
+.has().uppercase()                              
+.has().lowercase()                              
+.has().digits(1)                               
+.has().not().spaces()                          
+
+
+
+
+
+const encryptPassword = async (password) => {
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    return hashedPassword;
+  } catch (err) {
+    throw err;
+  }
+};
+
+const decryptPassword = async (password, hashedPassword) => {
+  try {
+    const encodedPassword = await bcrypt.compare(password, hashedPassword);
+    return encodedPassword;
+  } catch (err) {
+    throw err;
+  }
+};
+
+const validEmail = (email) => {
+  return body(email).isEmail();
+}
+
+const validPassword = (password) => {
+  return schema.validate(password);
+}
+
+
 
 router.post("/register", async (req, res) => {
   var { username, pass, masterpassword } = req.body;
   if (!username || !pass) {
     res.json({ msg: "empty fields not allowed" });
-  } else {
+  }
+  else if (!validEmail(username))
+  {
+      return res.json({"msg":"enter right email"})
+  }
+  else if (!validPassword(pass))
+  {
+        return res.json({"msg":"min 8 chars, min 1 capital , min 1 small, min 1 number, min 1 special char"}) 
+  }
+  else {
     try {
       var sql = `Select * FROM user where username="${username}"`;
-      await db.con.query(sql, (err, result, field) => {
+      await db.con.query(sql, async(err, result, field) => {
         if (err) throw err;
-        var obj = Object.keys(result);
-        if (obj.length !== 0 && obj[0].username != null) {
+        var obj = Object.assign({}, result[0]);
+        if (obj.length !== 0 && obj.username != null) {
           res.send("user already taken");
         } else {
-          var sql = `INSERT into user (username,pass,masterpassword) values ("${username}","${pass}","${masterpassword}")`;
+          const password = await encryptPassword(pass);
+          var sql = `INSERT into user (username,pass,masterpassword) values ("${username}","${password}","${masterpassword}")`;
           db.con.query(sql, (er, result) => {
             if (er) throw er;
             res.send("record inserted successfully");
@@ -37,15 +91,17 @@ router.post("/login", async (req, res) => {
   } else {
     try {
       var sql = `Select * FROM user where username="${username}"`;
-      await db.con.query(sql, (err, result, field) => {
+      await db.con.query(sql, async(err, result, field) => {
         if (err) throw err;
-        var obj = Object.keys(result);
+
+        var obj = Object.assign({}, result[0]);
         if (obj.length === 0) {
           return res.json({ msg: "not a user in database" });
         }
-        console.log(obj)
-        if (obj[0].username === null || obj[0].pass !== pass) {
-          console.log(obj[0]);
+        console.log(obj);
+
+        if (obj === {} || obj.username === null || !(await decryptPassword(pass,obj.pass))) {
+          console.log(obj);
           res.json({ msg: "enter right credentials" });
         } else {
           if (
@@ -76,7 +132,7 @@ router.post("/login", async (req, res) => {
 
 // delete
 
-router.post("/delete", async (req, res) => {
+router.delete("/delete", async (req, res) => {
   try {
     if (req.session.user.username === null) {
       res.json({ msg: "please login" });
@@ -96,14 +152,14 @@ router.post("/delete", async (req, res) => {
 
 // edit
 
-router.post("/edit", (req, res) => {
+router.put("/edit", async(req, res) => {
   try {
     if (req.session.user.username === null) {
       res.json({ msg: "please login" });
     } else if (req.session.user.isAdmin) {
       res.json({ msg: "you can't edit this record" });
     } else {
-      var sql = `Update user Set pass="${req.body.pass}" where username="${req.session.user.username}"`;
+      var sql = `Update user Set pass="${await encodedPassword(req.body.pass)}" where username="${req.session.user.username}"`;
       db.con.query(sql, (err, result, field) => {
         if (err) {
           console.log(err);
@@ -116,6 +172,8 @@ router.post("/edit", (req, res) => {
     res.json({ error: err });
   }
 });
+
+// logout
 
 router.post("/logout", (req, res) => {
   if (req.session.authenticated == true) {

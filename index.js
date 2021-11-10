@@ -16,7 +16,7 @@ app.use(cookieParser());
 app.use(
   session({
     secret: "Shh, its a secret!",
-    cookie: { maxAge: 30000 },
+    cookie: { maxAge: 3000000 },
     store: new FileStore(),
     saveUninitialized: false,
   })
