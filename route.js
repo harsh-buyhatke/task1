@@ -2,7 +2,8 @@ const express = require("express");
 const db = require("./database");
 const router = express.Router();
 const bcrypt = require("bcrypt");
-const { body, validationResult } = require("express-validator")
+var validator = require("email-validator");
+
 var passwordValidator = require('password-validator');
 
 
@@ -36,8 +37,10 @@ const decryptPassword = async (password, hashedPassword) => {
   }
 };
 
+// custom regex 
+
 const validEmail = (email) => {
-  return body(email).isEmail();
+  return validator.validate(email);
 }
 
 const validPassword = (password) => {
